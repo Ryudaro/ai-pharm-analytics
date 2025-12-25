@@ -1,98 +1,131 @@
-# Data Requirements and Structure
+# Data Requirements and Interaction
 
-## Purpose of the data
+This document describes how AI-Pharm Analytics works with data,
+what input formats are supported, and how input data is transformed
+for forecasting and analytics.
 
-The system operates on historical sales data of pharmaceutical products
-and is designed to build demand forecasts for individual products.
-
-Each forecast is generated independently for a single product
-without aggregation across products, categories, or pharmacies.
-
----
-
-## Data sources
-
-The system expects structured tabular sales data obtained from
-pharmacy accounting or sales reporting systems.
-
-Typical sources include:
-- local exports from pharmacy management systems,
-- sales reports in CSV or Excel format,
-- aggregated transactional sales data.
-
-The system does not rely on direct database connections or APIs
-and operates on locally stored files.
+The system is designed to accept real-world pharmacy data in familiar
+formats and automatically convert them into a unified internal
+representation suitable for forecasting models and future integrations.
 
 ---
 
-## Forecasting granularity
+## General approach
 
-Forecasts are built at the **individual product level**.
+AI-Pharm Analytics follows a two-stage data workflow:
 
-Key characteristics:
-- each product is modeled independently,
-- no cross-product aggregation is performed,
-- no hierarchical or grouped forecasting is assumed.
+1. **User-facing input data**  
+   Data provided in formats commonly used in pharmacies (e.g., Excel reports).
 
-A single time series corresponds to one product.
+2. **Internal canonical data format**  
+   A standardized representation used internally for modeling,
+   evaluation, and integration.
 
----
-
-## Expected data structure
-
-The input dataset is expected to contain the following fields:
-
-| Field name        | Type        | Required | Description |
-|------------------|-------------|----------|-------------|
-| `date`           | Date        | Yes      | Date of sales observation |
-| `product_id`     | String / ID | Yes      | Unique identifier of the product |
-| `sales_quantity` | Numeric     | Yes      | Number of units sold on the given date |
-
-Optional fields may include:
-- pharmacy identifier,
-- product name,
-- additional metadata.
-
-However, these fields are not required for forecasting logic.
+This approach allows pharmacy staff to work with familiar data formats
+while ensuring consistency and scalability inside the system.
 
 ---
 
-## Time series requirements
+## Input data format (Excel / wide format)
 
-- The time index must be explicitly provided via the `date` field
-- Observations are expected to be ordered in time
-- The system supports fixed time steps (e.g., daily, weekly, monthly)
-- Missing dates should be explicitly represented or handled during preprocessing
+### Description
 
-Each product time series must be sufficiently long to allow
-model training and evaluation.
+The primary supported input format is a spreadsheet-style table,
+widely used in pharmacy practice.
+
+Typical structure:
+- rows represent individual products,
+- columns represent calendar dates,
+- cell values represent quantities sold.
+
+### Example (input Excel)
+
+| Product name | 2025-01-01 | 2025-01-02 | 2025-01-03 |
+|--------------|------------|------------|------------|
+| Nurofen 200  | 3          | 1          | 0          |
+| Salbutamol  | 2          | 2          | 1          |
+
+### Interpretation
+
+- Product name — external product identifier (as provided by the user)
+- Date columns — sales dates
+- Cell values — number of units sold on the given date
+
+This format does not require preprocessing by the user and reflects
+how sales data is typically stored in pharmacies.
 
 ---
 
-## Data assumptions and limitations
+## Product identification
+
+Product names or labels provided in input files are not assumed
+to be stable identifiers.
+
+Internally, the system assigns each product a stable **`product_key`**.
+
+Identification logic:
+- If a stable identifier (barcode, internal system ID) is provided,
+  it is used directly.
+- Otherwise, the system creates and maintains a mapping between
+  user-provided product names and internal `product_key` values.
+
+This ensures continuity of time series across multiple uploads.
+
+---
+
+## Internal data format (canonical representation)
+
+Before forecasting, all input data is transformed into a unified
+internal format.
+
+### Canonical sales table (example)
+
+| date       | product_key | product_name | sales_quantity |
+|------------|-------------|--------------|----------------|
+| 2025-01-01 | PRD_001     | Nurofen 200  | 3              |
+| 2025-01-02 | PRD_001     | Nurofen 200  | 1              |
+| 2025-01-01 | PRD_002     | Salbutamol  | 2              |
+
+Each row represents sales of a single product on a single date.
+
+All forecasting models operate exclusively on this internal format.
+
+---
+
+## Additional factors (optional)
+
+The system supports optional additional factors that may influence demand,
+such as:
+- promotional activity indicators,
+- stock availability (out-of-stock),
+- pricing information,
+- weather-related variables.
+
+These factors are provided as separate datasets and aligned by date
+and product (or location) before modeling.
+
+---
+
+## Assumptions and limitations
 
 The system assumes that:
-- sales data reflects actual realized demand,
-- values in `sales_quantity` are non-negative,
-- returns, write-offs, and corrections are either excluded or preprocessed.
+- sales data reflects realized demand,
+- quantities are non-negative,
+- corrections (returns, write-offs) are handled before data upload.
 
-The system does not model:
-- pricing effects,
-- promotions or marketing campaigns,
-- substitutions between products.
-
-These factors are considered outside the current scope.
+The system does not explicitly model:
+- product substitution effects,
+- pricing strategy optimization,
+- marketing planning logic.
 
 ---
 
 ## Data handling policy
 
-Real sales data, proprietary datasets, and any confidential information
-are intentionally not stored or published in this repository.
+Real sales data and commercially sensitive information are not stored
+or published in this repository.
 
-The repository may include:
+The repository may contain:
 - data format descriptions,
-- schemas,
-- synthetic or illustrative sample data.
-
-All real-world data remains outside the version-controlled codebase.
+- schemas and examples,
+- synthetic or illustrative data only.
